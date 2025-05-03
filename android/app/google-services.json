@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "996603799042",
+    "firebase_url": "https://homespot-77ba6-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "homespot-77ba6",
+    "storage_bucket": "homespot-77ba6.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:996603799042:android:64fd84c4d283d070f7a91b",
+        "android_client_info": {
+          "package_name": "com.example.homespot"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC0IZuItxVBVw_jIOzXiyHsvQFViwvLLhU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
