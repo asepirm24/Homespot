@@ -40,6 +40,12 @@ dependencies:
   firebase_storage: ^12.4.5
   path: ^1.9.1
   image_picker: ^1.1.2
+  firebase_auth: ^5.5.3
+  geolocator: ^14.0.0
+  flutter_image_compress: ^2.4.0
+  firebase_app_check: ^0.3.2+5
+  google_generative_ai: ^0.4.7
+  shimmer: ^3.0.0
 
 
 dev_dependencies:
@@ -58,11 +64,10 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
-
-  # The following line ensures that the Material Icons font is
-  # included with your application, so that you can use the icons in
-  # the material Icons class.
   uses-material-design: true
+
+  assets:
+    - assets/HOMESPOT_LOGO-removebg-preview.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:
