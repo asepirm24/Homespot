@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:homespot/screens/home_screen.dart';
+import 'package:homespot/screens/main_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -163,7 +163,7 @@ class SignUpScreenState extends State<SignUpScreen> {
       });
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (context) => HomeScreen()),
+        MaterialPageRoute(builder: (context) => MainScreen()),
             (route) => false, // Hapus semua route sebelumnya
       );
     } on FirebaseAuthException catch (error) {

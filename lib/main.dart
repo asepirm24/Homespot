@@ -1,15 +1,13 @@
-import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:homespot/firebase_options.dart';
+import 'firebase_options.dart';
 import 'package:homespot/screens/sign_in_screen.dart';
-import 'package:homespot/screens/home_screen.dart'; // GANTI KE HomeScreen
+import 'package:homespot/screens/main_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(const MyApp());
 }
 
@@ -19,14 +17,17 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Fasum',
       debugShowCheckedModeBanner: false,
+      title: 'Homespot',
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.green),
+        useMaterial3: true,
+      ),
       home: const AuthWrapper(),
     );
   }
 }
 
-// === Wrapper untuk menentukan halaman awal berdasarkan status login ===
 class AuthWrapper extends StatelessWidget {
   const AuthWrapper({super.key});
 
@@ -35,20 +36,17 @@ class AuthWrapper extends StatelessWidget {
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
-        // Tampilkan loading saat proses auth
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
         }
 
-        // Jika sudah login → HomeScreen
         if (snapshot.hasData) {
-          return const HomeScreen();
+          return const MainScreen();
+        } else {
+          return const SignInScreen();
         }
-
-        // Jika belum login → LoginScreen
-        return const SignInScreen();
       },
     );
   }

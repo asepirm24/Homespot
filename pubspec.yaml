@@ -67,7 +67,9 @@ flutter:
   uses-material-design: true
 
   assets:
-    - assets/HOMESPOT_LOGO-removebg-preview.png
+    - assets/images/dummy_profile.png
+    - assets/images/HOMESPOT_LOGO-removebg-preview.png
+
 
   # To add assets to your application, add an assets section, like this:
   # assets:

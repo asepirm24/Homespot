@@ -1,7 +1,7 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:homespot/screens/home_screen.dart';
+import 'package:homespot/screens/main_screen.dart';
 import 'package:homespot/screens/sign_up_screen.dart';
 
 // Widget untuk halaman Sign In
@@ -40,7 +40,7 @@ class SignInScreenState extends State<SignInScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Image.asset(
-                    'assets/HOMESPOT_LOGO-removebg-preview.png', // Pastikan file ini ada di folder assets
+                    'assets/images/HOMESPOT_LOGO-removebg-preview.png', // Pastikan file ini ada di folder assets
                     height: 180,
                   ),
                   const SizedBox(height: 24.0),
@@ -157,7 +157,7 @@ class SignInScreenState extends State<SignInScreen> {
 
       // Navigasi ke halaman Home jika berhasil login
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => const HomeScreen()),
+        MaterialPageRoute(builder: (context) => const MainScreen()),
       );
     } on FirebaseAuthException catch (error) {
       // Menampilkan error dari Firebase Auth
