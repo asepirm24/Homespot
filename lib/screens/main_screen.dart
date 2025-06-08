@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:homespot/screens/home_screen.dart';
 import 'package:homespot/screens/search_screen.dart';
 import 'package:homespot/screens/favorite_screen.dart';
-import 'profile_screen.dart'; // Buat juga ini jika belum
+import 'profile_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -36,15 +36,17 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Scaffold(
       body: _screens[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
         items: _navItems,
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
-        backgroundColor: Colors.grey[200],
-        selectedItemColor: Colors.black87,
-        unselectedItemColor: Colors.grey,
+        backgroundColor: colorScheme.surface,
+        selectedItemColor: colorScheme.primary,
+        unselectedItemColor: colorScheme.onSurface.withOpacity(0.6),
         type: BottomNavigationBarType.fixed,
       ),
     );
