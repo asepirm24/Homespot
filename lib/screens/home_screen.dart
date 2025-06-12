@@ -203,7 +203,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     width: 160,
                                     decoration: BoxDecoration(
                                       borderRadius: BorderRadius.circular(10),
-                                      color: Colors.grey[200],
+                                      color: Theme.of(context).cardColor,
                                     ),
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -336,11 +336,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AddPostScreen())),
-        child: const Icon(Icons.add),
-        tooltip: 'Tambah Post',
       ),
     );
   }

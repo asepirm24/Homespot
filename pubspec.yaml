@@ -52,7 +52,16 @@ dependencies:
   provider: ^6.1.5
   shared_preferences: ^2.5.3
   geocoding: ^4.0.0
+  flutter_native_splash: ^2.4.6
 
+
+flutter_native_splash:
+  color: "#ffffff"
+  image: assets/images/Homespot-ss.png
+  branding: null
+  android_gravity: center
+  ios_content_mode: center
+  fullscreen: true
 
 dev_dependencies:
   flutter_test:
@@ -77,6 +86,7 @@ flutter:
     - assets/images/HOMESPOT_LOGO-removebg-preview.png
     - assets/images/homescreen.png
     - assets/images/favoritescreen-.png
+    - assets/images/Homespot-ss.png
 
 
   # To add assets to your application, add an assets section, like this:

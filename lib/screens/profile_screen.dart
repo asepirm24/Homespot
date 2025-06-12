@@ -119,8 +119,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               final createdAt = timestamp is Timestamp
                   ? timestamp.toDate()
                   : DateTime.now();
-              final createdAtStr =
-              DateFormat('dd MMMM yyyy, HH:mm', 'id_ID').format(createdAt);
+              final createdAtStr = DateFormat('dd MMMM yyyy, HH:mm', 'id_ID').format(createdAt);
 
               final likes = List<String>.from(data['likes'] ?? []);
               final likeCount = likes.length;
@@ -191,19 +190,53 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ),
                     const Divider(height: 1),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton.icon(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => EditPostScreen(postId: doc.id),
-                            ),
-                          ).then((_) => loadData());
-                        },
-                        icon: const Icon(Icons.edit, size: 18),
-                        label: const Text("Edit Post"),
+                    Padding(
+                      padding: const EdgeInsets.only(right: 12.0, bottom: 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton.icon(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => EditPostScreen(postId: doc.id),
+                                ),
+                              ).then((_) => loadData());
+                            },
+                            icon: const Icon(Icons.edit, size: 18),
+                            label: const Text("Edit Post"),
+                          ),
+                          const SizedBox(width: 8),
+                          TextButton.icon(
+                            onPressed: () async {
+                              final confirm = await showDialog<bool>(
+                                context: context,
+                                builder: (context) => AlertDialog(
+                                  title: const Text("Hapus Postingan"),
+                                  content: const Text("Apakah kamu yakin ingin menghapus postingan ini?"),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(context, false),
+                                      child: const Text("Batal"),
+                                    ),
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(context, true),
+                                      child: const Text("Hapus", style: TextStyle(color: Colors.red)),
+                                    ),
+                                  ],
+                                ),
+                              );
+
+                              if (confirm == true) {
+                                await FirebaseFirestore.instance.collection('posts').doc(doc.id).delete();
+                                loadData(); // Refresh setelah dihapus
+                              }
+                            },
+                            icon: const Icon(Icons.delete, size: 18, color: Colors.red),
+                            label: const Text("Hapus Post", style: TextStyle(color: Colors.red)),
+                          ),
+                        ],
                       ),
                     ),
                   ],

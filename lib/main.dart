@@ -2,12 +2,13 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
-
 import 'firebase_options.dart';
+
 import 'package:homespot/screens/sign_in_screen.dart';
 import 'package:homespot/screens/main_screen.dart';
+import 'package:homespot/screens/splash_screen.dart';
 import 'package:homespot/providers/theme_provider.dart';
-import 'package:intl/date_symbol_data_local.dart'; //
+import 'package:intl/date_symbol_data_local.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -35,7 +36,7 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: Colors.green,
-          brightness: Brightness.light, // ✅ disamakan dengan ThemeData
+          brightness: Brightness.light,
         ),
         useMaterial3: true,
         brightness: Brightness.light,
@@ -43,36 +44,12 @@ class MyApp extends StatelessWidget {
       darkTheme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: Colors.green,
-          brightness: Brightness.dark, // ✅ disamakan dengan ThemeData
+          brightness: Brightness.dark,
         ),
         useMaterial3: true,
         brightness: Brightness.dark,
       ),
-      home: const AuthWrapper(),
-    );
-  }
-}
-
-class AuthWrapper extends StatelessWidget {
-  const AuthWrapper({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-
-        if (snapshot.hasData) {
-          return const MainScreen();
-        } else {
-          return const SignInScreen();
-        }
-      },
+      home: const SplashScreen(), // Splash sebagai layar awal
     );
   }
 }
