@@ -7,10 +7,12 @@ import 'firebase_options.dart';
 import 'package:homespot/screens/sign_in_screen.dart';
 import 'package:homespot/screens/main_screen.dart';
 import 'package:homespot/providers/theme_provider.dart';
+import 'package:intl/date_symbol_data_local.dart'; //
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await initializeDateFormatting('id_ID', null);
   runApp(
     ChangeNotifierProvider(
       create: (_) => ThemeProvider(),

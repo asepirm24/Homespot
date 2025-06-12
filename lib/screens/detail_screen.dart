@@ -3,267 +3,355 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:homespot/screens/full_image_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class DetailScreen extends StatefulWidget {
-  const DetailScreen({
-    super.key,
-    required this.imageBase64,
-    required this.description,
-    required this.title,
-    required this.createdAt,
-    required this.fullName,
-    required this.latitude,
-    required this.longitude,
-    required this.heroTag,
-    required this.currentUserId,
-    required this.viewedUserId,
-  });
+  final String postId;
 
-  final String imageBase64;
-  final String description;
-  final String title;
-  final DateTime createdAt;
-  final String fullName;
-  final double latitude;
-  final double longitude;
-  final String heroTag;
-  final String currentUserId;
-  final String viewedUserId;
+  const DetailScreen({super.key, required this.postId});
 
   @override
   State<DetailScreen> createState() => _DetailScreenState();
 }
 
 class _DetailScreenState extends State<DetailScreen> {
-  final TextEditingController _commentController = TextEditingController();
+  Map<String, dynamic>? postData;
+  Map<String, dynamic>? userData;
+  bool isLoading = true;
+  bool isLiked = false;
+  int likeCount = 0;
+  final TextEditingController commentController = TextEditingController();
+  List<QueryDocumentSnapshot> comments = [];
+
+  final currentUserId = FirebaseAuth.instance.currentUser?.uid;
 
   @override
-  void dispose() {
-    _commentController.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    fetchPostAndUserData();
   }
 
-  Future<void> openMap() async {
-    final uri = Uri.parse(
-      'https://www.google.com/maps/search/?api=1&query=${widget.latitude},${widget.longitude}',
-    );
-    final success = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    if (!mounted) return;
-    if (!success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Tidak bisa membuka Google Maps')),
-      );
-    }
-  }
+  Future<void> fetchPostAndUserData() async {
+    final postDoc = await FirebaseFirestore.instance.collection('posts').doc(widget.postId).get();
 
-  Future<void> _addComment() async {
-    final text = _commentController.text.trim();
-    if (text.isNotEmpty) {
-      await FirebaseFirestore.instance
+    if (postDoc.exists) {
+      postData = postDoc.data();
+      final userId = postData!['userId'];
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(userId).get();
+
+      if (userDoc.exists) {
+        userData = userDoc.data();
+      }
+
+      // Likes
+      final likes = List<String>.from(postData!['likes'] ?? []);
+      isLiked = currentUserId != null && likes.contains(currentUserId);
+      likeCount = likes.length;
+
+      // Comments
+      final commentSnapshot = await FirebaseFirestore.instance
           .collection('posts')
-          .doc(widget.heroTag) // Gunakan heroTag sebagai ID post
+          .doc(widget.postId)
           .collection('comments')
-          .add({
-        'text': text,
-        'createdAt': FieldValue.serverTimestamp(),
-        'userId': widget.currentUserId,
-      });
-      _commentController.clear();
+          .orderBy('createdAt', descending: true)
+          .get();
+      comments = commentSnapshot.docs;
     }
+
+    setState(() {
+      isLoading = false;
+    });
+  }
+
+  Future<void> toggleLike() async {
+    if (currentUserId == null) return;
+    final docRef = FirebaseFirestore.instance.collection('posts').doc(widget.postId);
+    final postDoc = await docRef.get();
+    final likes = List<String>.from(postDoc.data()?['likes'] ?? []);
+
+    if (likes.contains(currentUserId)) {
+      likes.remove(currentUserId);
+      isLiked = false;
+    } else {
+      likes.add(currentUserId!);
+      isLiked = true;
+    }
+
+    likeCount = likes.length;
+
+    await docRef.update({'likes': likes});
+    setState(() {});
+  }
+
+  Future<void> submitComment() async {
+    final text = commentController.text.trim();
+    if (text.isEmpty || currentUserId == null) return;
+
+    final userDoc = await FirebaseFirestore.instance.collection('users').doc(currentUserId).get();
+    final user = userDoc.data();
+
+    if (user == null) return;
+
+    await FirebaseFirestore.instance
+        .collection('posts')
+        .doc(widget.postId)
+        .collection('comments')
+        .add({
+      'text': text,
+      'fullName': user['fullName'] ?? '',
+      'photoBase64': user['photoBase64'] ?? '',
+      'createdAt': DateTime.now().toIso8601String(), // simpan sebagai String ISO 8601
+    });
+
+    commentController.clear();
+    fetchPostAndUserData(); // Refresh comments
   }
 
   @override
   Widget build(BuildContext context) {
-    final createdAtFormatted = DateFormat('dd MMMM yyyy, HH:mm').format(widget.createdAt);
+    final f = NumberFormat.currency(locale: 'id', symbol: 'Rp', decimalDigits: 0);
+
+    if (isLoading) {
+      return Scaffold(
+        appBar: AppBar(title: Text('Detail Properti')),
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final images = List<String>.from(postData?['images'] ?? []);
+    final specsMap = Map<String, String>.from(postData?['specs'] ?? {});
+    final facilities = List<String>.from(postData?['facilities'] ?? []);
+    final createdAt = DateTime.tryParse(postData?['createdAt'] ?? '') ?? DateTime.now();
+    final formattedDate = DateFormat('d MMMM yyyy', 'id').format(createdAt);
+    final latitude = postData?['latitude'];
+    final longitude = postData?['longitude'];
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Detail Laporan")),
+      appBar: AppBar(title: Text('Detail Properti')),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.only(bottom: 20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Stack(
-              children: [
-                Hero(
-                  tag: widget.heroTag,
-                  child: Image.memory(
-                    base64Decode(widget.imageBase64),
-                    width: double.infinity,
+            if (images.isNotEmpty)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
                     height: 250,
-                    fit: BoxFit.cover,
-                  ),
-                ),
-                Positioned(
-                  top: 12,
-                  right: 12,
-                  child: IconButton(
-                    icon: const Icon(Icons.fullscreen, color: Colors.white),
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => FullScreenImageScreen(
-                            imageBase64: widget.imageBase64,
-                          ),
-                        ),
-                      );
-                    },
-                    tooltip: 'Lihat gambar penuh',
-                    style: IconButton.styleFrom(
-                      backgroundColor: Colors.black45,
+                    child: PageView.builder(
+                      itemCount: images.length,
+                      itemBuilder: (context, index) {
+                        return Image.memory(base64Decode(images[index]), fit: BoxFit.cover);
+                      },
                     ),
                   ),
-                ),
-              ],
-            ),
+                  Padding(
+                    padding: const EdgeInsets.all(12.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          postData?['title'] ?? '',
+                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          formattedDate,
+                          style: TextStyle(color: Colors.grey[600]),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+
+            // Profil dan Like
             Padding(
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  if (userData != null && userData!['photoBase64'] != null)
+                    CircleAvatar(
+                      backgroundImage: MemoryImage(base64Decode(userData!['photoBase64'])),
+                      radius: 20,
+                    ),
+                  if (userData != null) ...[
+                    SizedBox(width: 8),
+                    Text(userData!['fullName'] ?? '', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ],
+                  Spacer(),
+                  IconButton(
+                    icon: Icon(isLiked ? Icons.favorite : Icons.favorite_border, color: Colors.red),
+                    onPressed: toggleLike,
+                  ),
+                  Text(likeCount.toString()),
+                ],
+              ),
+            ),
+
+            // Alamat
+            Card(
+              margin: EdgeInsets.all(12),
+              child: Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Row(
+                  children: [
+                    Expanded(child: Text(postData?['address'] ?? '-')),
+                    IconButton(
+                      icon: Icon(Icons.location_on),
+                      onPressed: () {
+                        if (latitude != null && longitude != null) {
+                          final url = Uri.parse('https://www.google.com/maps/search/?api=1&query=$latitude,$longitude');
+                          launchUrl(url);
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Status, Jenis, Harga
+            Card(
+              margin: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(postData?['availability'] ?? '', style: TextStyle(color: Colors.green)),
+                    Text(postData?['propertyType'] ?? ''),
+                    Text(f.format(postData?['price'] ?? 0), style: TextStyle(fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ),
+            ),
+
+            // Deskripsi
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Text(postData?['description'] ?? ''),
+            ),
+
+            // Spesifikasi
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    widget.title,
-                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
+                  Text('Spesifikasi:', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ...specsMap.entries.map((e) => Text('• ${e.key}: ${e.value}')).toList(),
+                ],
+              ),
+            ),
+            SizedBox(height: 8),
+
+            // Fasilitas
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Fasilitas:', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ...facilities.map((e) => Text('• $e')).toList(),
+                ],
+              ),
+            ),
+            SizedBox(height: 24),
+
+            // Komentar
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Komentar:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  SizedBox(height: 12),
+                  ...comments.map((doc) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    final createdAtStr = data['createdAt'] as String?;
+                    final commentTime = createdAtStr != null ? DateTime.tryParse(createdAtStr) ?? DateTime.now() : DateTime.now();
+                    final now = DateTime.now();
+                    final difference = now.difference(commentTime);
+
+                    String timeAgo;
+                    if (difference.inMinutes < 1) {
+                      timeAgo = 'baru saja';
+                    } else if (difference.inMinutes < 60) {
+                      timeAgo = '${difference.inMinutes} menit lalu';
+                    } else if (difference.inHours < 24) {
+                      timeAgo = '${difference.inHours} jam lalu';
+                    } else if (difference.inDays < 30) {
+                      timeAgo = '${difference.inDays} hari lalu';
+                    } else if (difference.inDays < 365) {
+                      timeAgo = '${(difference.inDays / 30).floor()} bulan lalu';
+                    } else {
+                      timeAgo = '${(difference.inDays / 365).floor()} tahun lalu';
+                    }
+
+                    return Container(
+                      margin: EdgeInsets.only(bottom: 12),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(Icons.person, size: 20, color: Colors.grey),
-                          const SizedBox(width: 4),
-                          Text(widget.fullName, style: const TextStyle(fontSize: 14)),
-                        ],
-                      ),
-                      Row(
-                        children: [
-                          const Icon(Icons.access_time, size: 20, color: Colors.grey),
-                          const SizedBox(width: 4),
-                          Text(createdAtFormatted, style: const TextStyle(fontSize: 14)),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  Text(widget.description, style: const TextStyle(fontSize: 16)),
-                  const SizedBox(height: 16),
-                  ElevatedButton.icon(
-                    onPressed: openMap,
-                    icon: const Icon(Icons.map),
-                    label: const Text("Lihat di Google Maps"),
-                  ),
-                  const Divider(height: 32),
-                  const Text('Komentar', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-
-                  // Komentar dengan foto profil base64
-                  StreamBuilder<QuerySnapshot>(
-                    stream: FirebaseFirestore.instance
-                        .collection('posts')
-                        .doc(widget.heroTag)
-                        .collection('comments')
-                        .orderBy('createdAt', descending: true)
-                        .snapshots(),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
-
-                      if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                        return const Text('Belum ada komentar.', style: TextStyle(color: Colors.grey));
-                      }
-
-                      final comments = snapshot.data!.docs;
-
-                      return ListView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: comments.length,
-                        itemBuilder: (context, index) {
-                          final comment = comments[index];
-                          final text = comment['text'] ?? '';
-                          final userId = comment['userId'] ?? '';
-
-                          return FutureBuilder<DocumentSnapshot>(
-                            future: FirebaseFirestore.instance.collection('users').doc(userId).get(),
-                            builder: (context, userSnapshot) {
-                              if (userSnapshot.connectionState == ConnectionState.waiting) {
-                                return const SizedBox(
-                                  height: 50,
-                                  child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                                );
-                              }
-                              if (!userSnapshot.hasData || !userSnapshot.data!.exists) {
-                                // Kalau user tidak ditemukan
-                                return Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 4.0),
-                                  child: Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      const Icon(Icons.comment, size: 20, color: Colors.grey),
-                                      const SizedBox(width: 8),
-                                      Expanded(child: Text(text)),
-                                    ],
-                                  ),
-                                );
-                              }
-
-                              final userData = userSnapshot.data!.data() as Map<String, dynamic>;
-                              final userFullName = userData['fullName'] ?? 'User';
-                              final userPhotoBase64 = userData['photoBase64'] ?? '';
-
-                              return Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 8.0),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                          data['photoBase64'] != null
+                              ? CircleAvatar(
+                            backgroundImage: MemoryImage(base64Decode(data['photoBase64'])),
+                            radius: 16,
+                          )
+                              : CircleAvatar(child: Icon(Icons.person), radius: 16),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
                                   children: [
-                                    userPhotoBase64.isNotEmpty
-                                        ? CircleAvatar(
-                                      radius: 16,
-                                      backgroundImage: MemoryImage(base64Decode(userPhotoBase64)),
-                                    )
-                                        : const CircleAvatar(
-                                      radius: 16,
-                                      child: Icon(Icons.person, size: 16),
-                                    ),
-                                    const SizedBox(width: 8),
                                     Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            userFullName,
-                                            style: const TextStyle(fontWeight: FontWeight.bold),
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Text(text),
-                                        ],
+                                      child: Text(
+                                        data['fullName'] ?? '',
+                                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                                       ),
+                                    ),
+                                    Text(
+                                      timeAgo,
+                                      style: TextStyle(color: Colors.grey, fontSize: 11),
                                     ),
                                   ],
                                 ),
-                              );
-                            },
-                          );
-                        },
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _commentController,
-                    decoration: InputDecoration(
-                      hintText: 'Tulis komentar...',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                      suffixIcon: IconButton(
-                        icon: const Icon(Icons.send),
-                        onPressed: _addComment,
+                                SizedBox(height: 4),
+                                Text(data['text'] ?? '', style: TextStyle(fontSize: 13)),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
+                    );
+                  }).toList(),
+                  if (currentUserId != null)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        TextField(
+                          controller: commentController,
+                          decoration: InputDecoration(
+                            hintText: 'Tulis komentar...',
+                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          style: TextStyle(fontSize: 13),
+                        ),
+                        SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: ElevatedButton(
+                            onPressed: submitComment,
+                            style: ElevatedButton.styleFrom(padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8)),
+                            child: Text('Kirim', style: TextStyle(fontSize: 13)),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
                 ],
               ),
             ),

@@ -51,6 +51,7 @@ dependencies:
   firebase_messaging: ^15.2.6
   provider: ^6.1.5
   shared_preferences: ^2.5.3
+  geocoding: ^4.0.0
 
 
 dev_dependencies:
@@ -74,6 +75,8 @@ flutter:
   assets:
     - assets/images/dummy_profile.png
     - assets/images/HOMESPOT_LOGO-removebg-preview.png
+    - assets/images/homescreen.png
+    - assets/images/favoritescreen-.png
 
 
   # To add assets to your application, add an assets section, like this:

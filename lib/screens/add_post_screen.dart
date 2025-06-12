@@ -1,12 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
-import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
+import 'package:geocoding/geocoding.dart';
+import 'package:geolocator/geolocator.dart';
 
 class AddPostScreen extends StatefulWidget {
   const AddPostScreen({super.key});
@@ -16,223 +17,323 @@ class AddPostScreen extends StatefulWidget {
 }
 
 class _AddPostScreenState extends State<AddPostScreen> {
-  File? _image;
-  String? _base64Image;
-  final TextEditingController _titleController = TextEditingController();
-  final TextEditingController _descriptionController = TextEditingController();
-  final ImagePicker _picker = ImagePicker();
-  bool _isUploading = false;
-  double? _latitude;
-  double? _longitude;
+  final picker = ImagePicker();
+  List<String> base64Images = [];
+  String fullAddress = '';
+  double? latitude;
+  double? longitude;
+  String availability = 'Tersedia';
+  String propertyType = 'Rumah';
+  int? price;
+  String description = '';
+  String fullName = '';
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final _formKey = GlobalKey<FormState>();
 
-  Future<void> _pickImage(ImageSource source) async {
-    try {
-      final pickedFile = await _picker.pickImage(source: source);
-      if (pickedFile != null) {
+  Map<String, bool> facilities = {};
+  Map<String, TextEditingController> specs = {};
+
+  final titleController = TextEditingController();
+  final addressController = TextEditingController();
+  final priceController = TextEditingController();
+  final descriptionController = TextEditingController();
+
+  Map<String, String> domisili = {
+    'kecamatan': '',
+    'kota': '',
+    'provinsi': '',
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserInfo();
+    _initializeSpecControllers();
+  }
+
+  void _initializeSpecControllers() {
+    specs['Jumlah kamar tidur'] = TextEditingController();
+    specs['Jumlah kamar mandi'] = TextEditingController();
+    specs['Luas bangunan (m²)'] = TextEditingController();
+    specs['Ukuran kamar (m²)'] = TextEditingController();
+    specs['Jumlah kamar tersedia'] = TextEditingController();
+    specs['Lantai ke-'] = TextEditingController();
+    specs['Luas unit (m²)'] = TextEditingController();
+  }
+
+  Future<void> _loadUserInfo() async {
+    final user = _auth.currentUser;
+    if (user != null) {
+      final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      if (doc.exists) {
         setState(() {
-          _image = File(pickedFile.path);
+          fullName = doc['fullName'] ?? '';
         });
-        await _compressAndEncodeImage();
       }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to pick image: $e')),
-      );
     }
-  }
-
-  Future<void> _compressAndEncodeImage() async {
-    if (_image == null) return;
-    try {
-      final compressedImage = await FlutterImageCompress.compressWithFile(
-        _image!.path,
-        quality: 50,
-      );
-      if (compressedImage == null) return;
-      setState(() {
-        _base64Image = base64Encode(compressedImage);
-      });
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to compress image: $e')),
-      );
-    }
-  }
-
-  void _showImageSourceDialog() {
-    showModalBottomSheet(
-      context: context,
-      builder: (BuildContext context) {
-        return SafeArea(
-          child: Wrap(
-            children: <Widget>[
-              ListTile(
-                leading: const Icon(Icons.camera_alt),
-                title: const Text('Take a picture'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _pickImage(ImageSource.camera);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.photo_library),
-                title: const Text('Choose from gallery'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _pickImage(ImageSource.gallery);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.cancel),
-                title: const Text('Cancel'),
-                onTap: () => Navigator.pop(context),
-              ),
-            ],
-          ),
-        );
-      },
-    );
   }
 
   Future<void> _getLocation() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      throw Exception('Location services are disabled.');
-    }
+    if (!serviceEnabled) return;
 
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) return;
     }
 
-    if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
-      throw Exception('Location permissions are denied.');
-    }
+    Position position = await Geolocator.getCurrentPosition();
+    setState(() {
+      latitude = position.latitude;
+      longitude = position.longitude;
+    });
 
-    try {
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
-      ).timeout(const Duration(seconds: 10));
-      setState(() {
-        _latitude = position.latitude;
-        _longitude = position.longitude;
-      });
-    } catch (e) {
-      setState(() {
-        _latitude = null;
-        _longitude = null;
-      });
+    List<Placemark> placemarks = await placemarkFromCoordinates(latitude!, longitude!);
+    Placemark place = placemarks.first;
+
+    String kecamatan = place.subLocality?.trim().isNotEmpty == true ? place.subLocality! : 'Tidak diketahui';
+    String kota = place.locality?.trim().isNotEmpty == true
+        ? place.locality!
+        : (place.subAdministrativeArea?.trim().isNotEmpty == true ? place.subAdministrativeArea! : 'Tidak diketahui');
+    String provinsi = place.administrativeArea?.trim().isNotEmpty == true ? place.administrativeArea! : 'Tidak diketahui';
+
+    setState(() {
+      addressController.text = '${place.street}, $kecamatan, $kota, $provinsi, ${place.country}';
+      domisili = {
+        'kecamatan': kecamatan,
+        'kota': kota,
+        'provinsi': provinsi,
+      };
+    });
+  }
+
+  Future<void> _pickImages() async {
+    final pickedFiles = await picker.pickMultiImage();
+    if (pickedFiles.isNotEmpty) {
+      for (XFile image in pickedFiles) {
+        final compressed = await FlutterImageCompress.compressWithFile(
+          image.path,
+          minWidth: 600,
+          minHeight: 600,
+          quality: 80,
+        );
+        if (compressed != null) {
+          base64Images.add(base64Encode(compressed));
+        }
+      }
+      setState(() {});
+    }
+  }
+
+  Future<void> _pickCameraImage() async {
+    final image = await picker.pickImage(source: ImageSource.camera);
+    if (image != null) {
+      final compressed = await FlutterImageCompress.compressWithFile(
+        image.path,
+        minWidth: 600,
+        minHeight: 600,
+        quality: 80,
+      );
+      if (compressed != null) {
+        setState(() {
+          base64Images.add(base64Encode(compressed));
+        });
+      }
+    }
+  }
+
+  List<String> getFacilitiesByType(String type) {
+    switch (type) {
+      case 'Rumah':
+        return ['Furnished', 'AC', 'Garasi', 'Taman', 'Dapur'];
+      case 'Kost/Kosan':
+        return ['Kamar mandi dalam', 'Wi-Fi', 'AC', 'Untuk putra', 'Untuk putri'];
+      case 'Apartemen':
+        return ['Furnished', 'Lift', 'AC', 'Kolam renang', 'Parkir'];
+      case 'Kontrakan':
+        return ['Dapur', 'Parkir motor', 'AC', 'Terpisah dari pemilik', 'Halaman kecil'];
+      default:
+        return [];
+    }
+  }
+
+  List<String> getSpecFieldsByType(String type) {
+    switch (type) {
+      case 'Rumah':
+        return ['Jumlah kamar tidur', 'Jumlah kamar mandi', 'Luas bangunan (m²)'];
+      case 'Kost/Kosan':
+        return ['Ukuran kamar (m²)', 'Jumlah kamar tersedia'];
+      case 'Apartemen':
+        return ['Lantai ke-', 'Luas unit (m²)', 'Jumlah kamar tidur'];
+      case 'Kontrakan':
+        return ['Jumlah kamar tidur', 'Jumlah kamar mandi'];
+      default:
+        return [];
     }
   }
 
   Future<void> _submitPost() async {
-    if (_base64Image == null ||
-        _titleController.text.isEmpty ||
-        _descriptionController.text.isEmpty) return;
+    final user = _auth.currentUser;
+    if (user == null) return;
 
-    setState(() => _isUploading = true);
-    final now = DateTime.now().toIso8601String();
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (!_formKey.currentState!.validate()) return;
 
-    if (uid == null) {
-      setState(() => _isUploading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Pengguna tidak ditemukan.')),
-      );
-      return;
+    final now = DateTime.now();
+    final selectedFacilities = facilities.entries.where((e) => e.value).map((e) => e.key).toList();
+
+    final selectedSpecsMap = <String, String>{};
+    for (var key in getSpecFieldsByType(propertyType)) {
+      selectedSpecsMap[key] = specs[key]?.text ?? '';
     }
 
+    final doc = {
+      "title": titleController.text,
+      "address": addressController.text,
+      "availability": availability,
+      "createdAt": now.toIso8601String(),
+      "domisili": domisili,
+      "facilities": selectedFacilities,
+      "fullName": fullName,
+      "location": {
+        "latitude": latitude,
+        "longitude": longitude
+      },
+      "price": price,
+      "specs": selectedSpecsMap,
+      "userId": user.uid,
+      "images": base64Images,
+      "description": descriptionController.text,
+      "propertyType": propertyType,
+    };
+
     try {
-      await _getLocation();
-      final userDoc =
-      await FirebaseFirestore.instance.collection('users').doc(uid).get();
-      final fullName = userDoc.data()?['fullName'] ?? 'Tanpa Nama';
+      final docRef = await FirebaseFirestore.instance.collection('posts').add(doc);
+      await docRef.update({'postId': docRef.id});
 
-      await FirebaseFirestore.instance.collection('posts').add({
-        'title': _titleController.text,
-        'image': _base64Image,
-        'description': _descriptionController.text,
-        'createdAt': now,
-        'latitude': _latitude,
-        'longitude': _longitude,
-        'fullName': fullName,
-        'userId': uid,
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Post berhasil ditambahkan')));
+
+      setState(() {
+        titleController.clear();
+        addressController.clear();
+        descriptionController.clear();
+        priceController.clear();
+        base64Images.clear();
+        facilities.clear();
+        specs.forEach((key, controller) => controller.clear());
+        price = null;
       });
-
-      if (!mounted) return;
-      Navigator.pop(context);
     } catch (e) {
-      setState(() => _isUploading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal mengunggah postingan.')),
-      );
+      print('Error saat menambahkan post: $e');
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal mengunggah post')));
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final f = NumberFormat.currency(locale: 'id', symbol: 'Rp', decimalDigits: 0);
+
     return Scaffold(
-      appBar: AppBar(title: Text('Add Post')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            GestureDetector(
-              onTap: _showImageSourceDialog,
-              child: Container(
-                height: 250,
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: _image != null
-                    ? ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Image.file(
-                    _image!,
-                    height: 250,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                  ),
-                )
-                    : const Center(
-                  child: Icon(
-                    Icons.add_a_photo,
-                    size: 50,
-                    color: Colors.grey,
-                  ),
-                ),
+      appBar: AppBar(title: Text('Tambah Post')),
+      body: Form(
+        key: _formKey,
+        child: SingleChildScrollView(
+          padding: EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  ElevatedButton(onPressed: _pickImages, child: Text('Ambil dari Galeri')),
+                  SizedBox(width: 8),
+                  ElevatedButton(onPressed: _pickCameraImage, child: Text('Ambil dari Kamera')),
+                ],
               ),
-            ),
-            const SizedBox(height: 24),
-            TextField(
-              controller: _titleController,
-              textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(
-                hintText: 'Title',
-                border: OutlineInputBorder(),
+              Wrap(
+                children: base64Images.asMap().entries.map((entry) {
+                  int index = entry.key;
+                  String img = entry.value;
+                  return Stack(
+                    alignment: Alignment.topRight,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(4.0),
+                        child: Image.memory(base64Decode(img), height: 80),
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            base64Images.removeAt(index);
+                          });
+                        },
+                        child: Icon(Icons.close, color: Colors.red),
+                      ),
+                    ],
+                  );
+                }).toList(),
               ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _descriptionController,
-              textCapitalization: TextCapitalization.sentences,
-              maxLines: 6,
-              decoration: const InputDecoration(
-                hintText: 'Description',
-                border: OutlineInputBorder(),
+              TextFormField(
+                controller: titleController,
+                decoration: InputDecoration(labelText: 'Judul Properti'),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Judul tidak boleh kosong';
+                  }
+                  return null;
+                },
               ),
-            ),
-            const SizedBox(height: 24),
-            _isUploading
-                ? const Center(child: CircularProgressIndicator())
-                : ElevatedButton.icon(
-              onPressed: _submitPost,
-              icon: const Icon(Icons.upload),
-              label: const Text('Post'),
-            ),
-          ],
+              TextFormField(
+                controller: addressController,
+                decoration: InputDecoration(labelText: 'Alamat Lengkap'),
+              ),
+              ElevatedButton(onPressed: _getLocation, child: Text('Gunakan Lokasi Saat Ini')),
+              TextFormField(
+                controller: descriptionController,
+                decoration: InputDecoration(labelText: 'Deskripsi'),
+              ),
+              TextFormField(
+                controller: priceController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(labelText: 'Harga Sewa (Rp)'),
+                onChanged: (val) {
+                  String numeric = val.replaceAll(RegExp(r'[^0-9]'), '');
+                  if (numeric.isEmpty) numeric = '0';
+                  price = int.tryParse(numeric) ?? 0;
+                  priceController.value = TextEditingValue(
+                    text: f.format(price),
+                    selection: TextSelection.collapsed(offset: f.format(price).length),
+                  );
+                },
+              ),
+              DropdownButtonFormField(
+                value: propertyType,
+                items: ['Rumah', 'Kost/Kosan', 'Apartemen', 'Kontrakan']
+                    .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                    .toList(),
+                onChanged: (val) => setState(() => propertyType = val!),
+                decoration: InputDecoration(labelText: 'Jenis Properti'),
+              ),
+              DropdownButtonFormField(
+                value: availability,
+                items: ['Tersedia', 'Dipakai']
+                    .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                    .toList(),
+                onChanged: (val) => setState(() => availability = val!),
+                decoration: InputDecoration(labelText: 'Status Ketersediaan'),
+              ),
+              ...getFacilitiesByType(propertyType).map((e) => CheckboxListTile(
+                title: Text(e),
+                value: facilities[e] ?? false,
+                onChanged: (val) => setState(() => facilities[e] = val!),
+              )),
+              ...getSpecFieldsByType(propertyType).map((e) => TextFormField(
+                controller: specs[e],
+                decoration: InputDecoration(labelText: e),
+              )),
+              SizedBox(height: 16),
+              ElevatedButton(onPressed: _submitPost, child: Text('Submit')),
+            ],
+          ),
         ),
       ),
     );
