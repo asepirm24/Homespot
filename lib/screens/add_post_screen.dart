@@ -147,7 +147,7 @@ class _AddPostScreenState extends State<AddPostScreen> {
     switch (type) {
       case 'Rumah':
         return ['Furnished', 'AC', 'Garasi', 'Taman', 'Dapur'];
-      case 'Kost/Kosan':
+      case 'Kost':
         return ['Kamar mandi dalam', 'Wi-Fi', 'AC', 'Untuk putra', 'Untuk putri'];
       case 'Apartemen':
         return ['Furnished', 'Lift', 'AC', 'Kolam renang', 'Parkir'];
@@ -162,7 +162,7 @@ class _AddPostScreenState extends State<AddPostScreen> {
     switch (type) {
       case 'Rumah':
         return ['Jumlah kamar tidur', 'Jumlah kamar mandi', 'Luas bangunan (m²)'];
-      case 'Kost/Kosan':
+      case 'Kost':
         return ['Ukuran kamar (m²)', 'Jumlah kamar tersedia'];
       case 'Apartemen':
         return ['Lantai ke-', 'Luas unit (m²)', 'Jumlah kamar tidur'];
@@ -307,7 +307,7 @@ class _AddPostScreenState extends State<AddPostScreen> {
               ),
               DropdownButtonFormField(
                 value: propertyType,
-                items: ['Rumah', 'Kost/Kosan', 'Apartemen', 'Kontrakan']
+                items: ['Rumah', 'Kost', 'Apartemen', 'Kontrakan']
                     .map((e) => DropdownMenuItem(value: e, child: Text(e)))
                     .toList(),
                 onChanged: (val) => setState(() => propertyType = val!),

@@ -19,7 +19,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
   String selectedCategory = 'All';
-  final List<String> categories = ['All', 'Rumah', 'Kos', 'Apartemen', 'Ruko'];
+  final List<String> categories = ['All', 'Rumah', 'Kost', 'Apartemen', 'Kontrakan'];
   late ScrollController _scrollController;
   bool showTrending = true;
   double _lastOffset = 0;
