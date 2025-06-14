@@ -211,7 +211,7 @@ class _EditPostScreenState extends State<EditPostScreen> {
   }) async {
     setState(() => _isGenerating = true);
     try {
-      const apiKey = 'YOUR_API_KEY';
+      const apiKey = 'AIzaSyBlKsOM5jOf2v7jNctojKJ-KtHkBJjEuIs';
       final url = Uri.parse(
           'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$apiKey');
 

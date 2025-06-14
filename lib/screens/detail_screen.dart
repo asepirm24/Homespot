@@ -43,12 +43,10 @@ class _DetailScreenState extends State<DetailScreen> {
         userData = userDoc.data();
       }
 
-      // Likes
       final likes = List<String>.from(postData!['likes'] ?? []);
       isLiked = currentUserId != null && likes.contains(currentUserId);
       likeCount = likes.length;
 
-      // Comments
       final commentSnapshot = await FirebaseFirestore.instance
           .collection('posts')
           .doc(widget.postId)
@@ -100,12 +98,26 @@ class _DetailScreenState extends State<DetailScreen> {
       'text': text,
       'fullName': user['fullName'] ?? '',
       'photoBase64': user['photoBase64'] ?? '',
-      'createdAt': DateTime.now().toIso8601String(), // simpan sebagai String ISO 8601
+      'createdAt': DateTime.now().toIso8601String(),
     });
 
     commentController.clear();
-    fetchPostAndUserData(); // Refresh comments
+    fetchPostAndUserData();
   }
+
+  Future<void> openMap(double latitude, double longitude) async {
+    final uri = Uri.parse(
+      'https://www.google.com/maps/search/?api=1&query=$latitude,$longitude',
+    );
+    final success = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!mounted) return;
+    if (!success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Tidak bisa membuka Google Maps')),
+      );
+    }
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -123,8 +135,10 @@ class _DetailScreenState extends State<DetailScreen> {
     final facilities = List<String>.from(postData?['facilities'] ?? []);
     final createdAt = DateTime.tryParse(postData?['createdAt'] ?? '') ?? DateTime.now();
     final formattedDate = DateFormat('d MMMM yyyy', 'id').format(createdAt);
-    final latitude = postData?['latitude'];
-    final longitude = postData?['longitude'];
+    final location = postData?['location'] as Map<String, dynamic>?;
+    final lat = (location?['latitude'] as num?)?.toDouble();
+    final lon = (location?['longitude'] as num?)?.toDouble();
+
 
     return Scaffold(
       appBar: AppBar(title: Text('Detail Properti')),
@@ -165,7 +179,6 @@ class _DetailScreenState extends State<DetailScreen> {
                 ],
               ),
 
-            // Profil dan Like
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(
@@ -189,7 +202,6 @@ class _DetailScreenState extends State<DetailScreen> {
               ),
             ),
 
-            // Alamat
             Card(
               margin: EdgeInsets.all(12),
               child: Padding(
@@ -200,9 +212,15 @@ class _DetailScreenState extends State<DetailScreen> {
                     IconButton(
                       icon: Icon(Icons.location_on),
                       onPressed: () {
-                        if (latitude != null && longitude != null) {
-                          final url = Uri.parse('https://www.google.com/maps/search/?api=1&query=$latitude,$longitude');
-                          launchUrl(url);
+                        final location = postData?['location'] as Map<String, dynamic>?;
+                        final lat = (location?['latitude'] as num?)?.toDouble();
+                        final lon = (location?['longitude'] as num?)?.toDouble();
+                        if (lat != null && lon != null) {
+                          openMap(lat, lon);
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Lokasi tidak tersedia')),
+                          );
                         }
                       },
                     ),
@@ -211,7 +229,6 @@ class _DetailScreenState extends State<DetailScreen> {
               ),
             ),
 
-            // Status, Jenis, Harga
             Card(
               margin: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               child: Padding(
@@ -227,13 +244,11 @@ class _DetailScreenState extends State<DetailScreen> {
               ),
             ),
 
-            // Deskripsi
             Padding(
               padding: const EdgeInsets.all(12),
               child: Text(postData?['description'] ?? ''),
             ),
 
-            // Spesifikasi
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Column(
@@ -246,7 +261,6 @@ class _DetailScreenState extends State<DetailScreen> {
             ),
             SizedBox(height: 8),
 
-            // Fasilitas
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Column(
@@ -259,7 +273,6 @@ class _DetailScreenState extends State<DetailScreen> {
             ),
             SizedBox(height: 24),
 
-            // Komentar
             Padding(
               padding: const EdgeInsets.all(12),
               child: Column(

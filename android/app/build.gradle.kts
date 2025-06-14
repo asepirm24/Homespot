@@ -18,7 +18,7 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace = "com.example.homespot"
+    namespace = "com.homepab2.homespot"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = "27.0.12077973"
 
