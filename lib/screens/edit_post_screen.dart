@@ -299,7 +299,7 @@ class _EditPostScreenState extends State<EditPostScreen> {
     final f = NumberFormat.currency(locale: 'id', symbol: 'Rp', decimalDigits: 0);
 
     return Scaffold(
-      appBar: AppBar(title: Text('Tambah Post')),
+      appBar: AppBar(title: Text('Edit Post')),
       body: Form(
         key: _formKey,
         child: SingleChildScrollView(

@@ -1,4 +1,4 @@
-package com.example.homespot;
+package com.kelompok4.homespot;
 
 import io.flutter.embedding.android.FlutterActivity;
 
