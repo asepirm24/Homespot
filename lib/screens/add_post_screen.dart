@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -8,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:http/http.dart' as http;
 
 class AddPostScreen extends StatefulWidget {
   const AddPostScreen({super.key});
@@ -18,18 +18,17 @@ class AddPostScreen extends StatefulWidget {
 
 class _AddPostScreenState extends State<AddPostScreen> {
   final picker = ImagePicker();
+  final _formKey = GlobalKey<FormState>();
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+
   List<String> base64Images = [];
-  String fullAddress = '';
-  double? latitude;
-  double? longitude;
+  String fullName = '';
   String availability = 'Tersedia';
   String propertyType = 'Rumah';
+  double? latitude;
+  double? longitude;
   int? price;
-  String description = '';
-  String fullName = '';
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final _formKey = GlobalKey<FormState>();
-
+  Map<String, String> domisili = {'kecamatan': '', 'kota': '', 'provinsi': ''};
   Map<String, bool> facilities = {};
   Map<String, TextEditingController> specs = {};
 
@@ -38,11 +37,7 @@ class _AddPostScreenState extends State<AddPostScreen> {
   final priceController = TextEditingController();
   final descriptionController = TextEditingController();
 
-  Map<String, String> domisili = {
-    'kecamatan': '',
-    'kota': '',
-    'provinsi': '',
-  };
+  bool _isGenerating = false;
 
   @override
   void initState() {
@@ -52,13 +47,15 @@ class _AddPostScreenState extends State<AddPostScreen> {
   }
 
   void _initializeSpecControllers() {
-    specs['Jumlah kamar tidur'] = TextEditingController();
-    specs['Jumlah kamar mandi'] = TextEditingController();
-    specs['Luas bangunan (m²)'] = TextEditingController();
-    specs['Ukuran kamar (m²)'] = TextEditingController();
-    specs['Jumlah kamar tersedia'] = TextEditingController();
-    specs['Lantai ke-'] = TextEditingController();
-    specs['Luas unit (m²)'] = TextEditingController();
+    specs = {
+      'Jumlah kamar tidur': TextEditingController(),
+      'Jumlah kamar mandi': TextEditingController(),
+      'Luas bangunan (m²)': TextEditingController(),
+      'Ukuran kamar (m²)': TextEditingController(),
+      'Jumlah kamar tersedia': TextEditingController(),
+      'Lantai ke-': TextEditingController(),
+      'Luas unit (m²)': TextEditingController(),
+    };
   }
 
   Future<void> _loadUserInfo() async {
@@ -83,20 +80,18 @@ class _AddPostScreenState extends State<AddPostScreen> {
       if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) return;
     }
 
-    Position position = await Geolocator.getCurrentPosition();
+    final position = await Geolocator.getCurrentPosition();
     setState(() {
       latitude = position.latitude;
       longitude = position.longitude;
     });
 
-    List<Placemark> placemarks = await placemarkFromCoordinates(latitude!, longitude!);
-    Placemark place = placemarks.first;
+    final placemarks = await placemarkFromCoordinates(latitude!, longitude!);
+    final place = placemarks.first;
 
-    String kecamatan = place.subLocality?.trim().isNotEmpty == true ? place.subLocality! : 'Tidak diketahui';
-    String kota = place.locality?.trim().isNotEmpty == true
-        ? place.locality!
-        : (place.subAdministrativeArea?.trim().isNotEmpty == true ? place.subAdministrativeArea! : 'Tidak diketahui');
-    String provinsi = place.administrativeArea?.trim().isNotEmpty == true ? place.administrativeArea! : 'Tidak diketahui';
+    final kecamatan = place.subLocality?.isNotEmpty == true ? place.subLocality! : 'Tidak diketahui';
+    final kota = place.locality?.isNotEmpty == true ? place.locality! : place.subAdministrativeArea ?? 'Tidak diketahui';
+    final provinsi = place.administrativeArea ?? 'Tidak diketahui';
 
     setState(() {
       addressController.text = '${place.street}, $kecamatan, $kota, $provinsi, ${place.country}';
@@ -111,7 +106,7 @@ class _AddPostScreenState extends State<AddPostScreen> {
   Future<void> _pickImages() async {
     final pickedFiles = await picker.pickMultiImage();
     if (pickedFiles.isNotEmpty) {
-      for (XFile image in pickedFiles) {
+      for (var image in pickedFiles) {
         final compressed = await FlutterImageCompress.compressWithFile(
           image.path,
           minWidth: 600,
@@ -173,15 +168,68 @@ class _AddPostScreenState extends State<AddPostScreen> {
     }
   }
 
+  Future<void> _generateDescriptionWithAI({
+    required String address,
+    required List<String> facilities,
+    required Map<String, String> specs,
+  }) async {
+    setState(() => _isGenerating = true);
+    try {
+      const apiKey = 'YOUR_API_KEY';
+      final url = Uri.parse(
+          'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$apiKey');
+
+      final body = jsonEncode({
+        "contents": [
+          {
+            "parts": [
+              {
+                "text":
+                "Buat deskripsi menarik untuk iklan properti berdasarkan data berikut:\n\n"
+                    "Alamat: $address\n"
+                    "Fasilitas: ${facilities.join(', ')}\n"
+                    "Spesifikasi: ${specs.entries.map((e) => '${e.key}: ${e.value}').join(', ')}\n\n"
+                    "Tulis deskripsi dalam 3 kalimat menggunakan bahasa persuasif."
+              }
+            ]
+          }
+        ]
+      });
+
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: body,
+      );
+
+      if (response.statusCode == 200) {
+        final jsonResponse = jsonDecode(response.body);
+        final text = jsonResponse['candidates'][0]['content']['parts'][0]['text'];
+        if (text != null && text.isNotEmpty) {
+          setState(() {
+            descriptionController.text = text.trim();
+          });
+        }
+      } else {
+        debugPrint('Request failed: ${response.body}');
+      }
+    } catch (e) {
+      debugPrint('AI error: $e');
+    } finally {
+      if (mounted) setState(() => _isGenerating = false);
+    }
+  }
+
   Future<void> _submitPost() async {
     final user = _auth.currentUser;
-    if (user == null) return;
+    if (user == null || !_formKey.currentState!.validate()) return;
 
-    if (!_formKey.currentState!.validate()) return;
+    if (base64Images.isEmpty || latitude == null || longitude == null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Mohon lengkapi semua data!')));
+      return;
+    }
 
-    final now = DateTime.now();
     final selectedFacilities = facilities.entries.where((e) => e.value).map((e) => e.key).toList();
-
     final selectedSpecsMap = <String, String>{};
     for (var key in getSpecFieldsByType(propertyType)) {
       selectedSpecsMap[key] = specs[key]?.text ?? '';
@@ -191,14 +239,11 @@ class _AddPostScreenState extends State<AddPostScreen> {
       "title": titleController.text,
       "address": addressController.text,
       "availability": availability,
-      "createdAt": now.toIso8601String(),
+      "createdAt": DateTime.now().toIso8601String(),
       "domisili": domisili,
       "facilities": selectedFacilities,
       "fullName": fullName,
-      "location": {
-        "latitude": latitude,
-        "longitude": longitude
-      },
+      "location": {"latitude": latitude, "longitude": longitude},
       "price": price,
       "specs": selectedSpecsMap,
       "userId": user.uid,
@@ -210,23 +255,27 @@ class _AddPostScreenState extends State<AddPostScreen> {
     try {
       final docRef = await FirebaseFirestore.instance.collection('posts').add(doc);
       await docRef.update({'postId': docRef.id});
-
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Post berhasil ditambahkan')));
-
-      setState(() {
-        titleController.clear();
-        addressController.clear();
-        descriptionController.clear();
-        priceController.clear();
-        base64Images.clear();
-        facilities.clear();
-        specs.forEach((key, controller) => controller.clear());
-        price = null;
-      });
+      _resetForm();
     } catch (e) {
-      print('Error saat menambahkan post: $e');
+      debugPrint('Error submit: $e');
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal mengunggah post')));
     }
+  }
+
+  void _resetForm() {
+    setState(() {
+      titleController.clear();
+      addressController.clear();
+      descriptionController.clear();
+      priceController.clear();
+      base64Images.clear();
+      facilities.clear();
+      for (var c in specs.values) {
+        c.clear();
+      }
+      price = null;
+    });
   }
 
   @override
@@ -244,15 +293,15 @@ class _AddPostScreenState extends State<AddPostScreen> {
             children: [
               Row(
                 children: [
-                  ElevatedButton(onPressed: _pickImages, child: Text('Ambil dari Galeri')),
+                  ElevatedButton(onPressed: _pickImages, child: Text('Galeri')),
                   SizedBox(width: 8),
-                  ElevatedButton(onPressed: _pickCameraImage, child: Text('Ambil dari Kamera')),
+                  ElevatedButton(onPressed: _pickCameraImage, child: Text('Kamera')),
                 ],
               ),
               Wrap(
                 children: base64Images.asMap().entries.map((entry) {
-                  int index = entry.key;
-                  String img = entry.value;
+                  final index = entry.key;
+                  final img = entry.value;
                   return Stack(
                     alignment: Alignment.topRight,
                     children: [
@@ -262,9 +311,7 @@ class _AddPostScreenState extends State<AddPostScreen> {
                       ),
                       GestureDetector(
                         onTap: () {
-                          setState(() {
-                            base64Images.removeAt(index);
-                          });
+                          setState(() => base64Images.removeAt(index));
                         },
                         child: Icon(Icons.close, color: Colors.red),
                       ),
@@ -272,32 +319,28 @@ class _AddPostScreenState extends State<AddPostScreen> {
                   );
                 }).toList(),
               ),
+              SizedBox(height: 12),
               TextFormField(
                 controller: titleController,
-                decoration: InputDecoration(labelText: 'Judul Properti'),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Judul tidak boleh kosong';
-                  }
-                  return null;
-                },
+                decoration: InputDecoration(labelText: 'Judul'),
+                validator: (val) => val == null || val.isEmpty ? 'Judul wajib diisi' : null,
               ),
+              SizedBox(height: 12),
               TextFormField(
                 controller: addressController,
-                decoration: InputDecoration(labelText: 'Alamat Lengkap'),
+                decoration: InputDecoration(labelText: 'Alamat'),
+                validator: (val) => val == null || val.isEmpty ? 'Alamat wajib diisi' : null,
               ),
+              SizedBox(height: 8),
               ElevatedButton(onPressed: _getLocation, child: Text('Gunakan Lokasi Saat Ini')),
-              TextFormField(
-                controller: descriptionController,
-                decoration: InputDecoration(labelText: 'Deskripsi'),
-              ),
+              SizedBox(height: 12),
               TextFormField(
                 controller: priceController,
                 keyboardType: TextInputType.number,
-                decoration: InputDecoration(labelText: 'Harga Sewa (Rp)'),
+                decoration: InputDecoration(labelText: 'Harga sewa perbulan (Rp)'),
+                validator: (val) => val == null || val.isEmpty ? 'Harga wajib diisi' : null,
                 onChanged: (val) {
-                  String numeric = val.replaceAll(RegExp(r'[^0-9]'), '');
-                  if (numeric.isEmpty) numeric = '0';
+                  final numeric = val.replaceAll(RegExp(r'[^0-9]'), '');
                   price = int.tryParse(numeric) ?? 0;
                   priceController.value = TextEditingValue(
                     text: f.format(price),
@@ -305,6 +348,7 @@ class _AddPostScreenState extends State<AddPostScreen> {
                   );
                 },
               ),
+              SizedBox(height: 12),
               DropdownButtonFormField(
                 value: propertyType,
                 items: ['Rumah', 'Kost', 'Apartemen', 'Kontrakan']
@@ -313,14 +357,16 @@ class _AddPostScreenState extends State<AddPostScreen> {
                 onChanged: (val) => setState(() => propertyType = val!),
                 decoration: InputDecoration(labelText: 'Jenis Properti'),
               ),
+              SizedBox(height: 12),
               DropdownButtonFormField(
                 value: availability,
                 items: ['Tersedia', 'Dipakai']
                     .map((e) => DropdownMenuItem(value: e, child: Text(e)))
                     .toList(),
                 onChanged: (val) => setState(() => availability = val!),
-                decoration: InputDecoration(labelText: 'Status Ketersediaan'),
+                decoration: InputDecoration(labelText: 'Status'),
               ),
+              SizedBox(height: 12),
               ...getFacilitiesByType(propertyType).map((e) => CheckboxListTile(
                 title: Text(e),
                 value: facilities[e] ?? false,
@@ -331,7 +377,35 @@ class _AddPostScreenState extends State<AddPostScreen> {
                 decoration: InputDecoration(labelText: e),
               )),
               SizedBox(height: 16),
-              ElevatedButton(onPressed: _submitPost, child: Text('Submit')),
+              TextFormField(
+                controller: descriptionController,
+                decoration: InputDecoration(
+                  labelText: 'Deskripsi',
+                  alignLabelWithHint: true,
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.multiline,
+                minLines: 3,
+                maxLines: 10,
+              ),
+              SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () {
+                  final selectedFacilities = facilities.entries.where((e) => e.value).map((e) => e.key).toList();
+                  final selectedSpecs = <String, String>{};
+                  for (var key in getSpecFieldsByType(propertyType)) {
+                    selectedSpecs[key] = specs[key]?.text ?? '';
+                  }
+                  _generateDescriptionWithAI(
+                    address: addressController.text,
+                    facilities: selectedFacilities,
+                    specs: selectedSpecs,
+                  );
+                },
+                child: _isGenerating ? CircularProgressIndicator(color: Colors.white) : Text('Generate Deskripsi AI'),
+              ),
+              SizedBox(height: 16),
+              ElevatedButton(onPressed: _submitPost, child: Text('Unggah Post')),
             ],
           ),
         ),
